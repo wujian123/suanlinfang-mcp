@@ -1,0 +1,11 @@
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[dependency-groups]
+dev = ["pytest>=8.0", "respx>=0.22", "fastmcp>=3.0"]
+
+[tool.pytest.ini_options]
+testpaths = [
+    "packages/suanlinfang-sdk/tests",
+    "packages/suanlinfang-mcp/tests",
+]

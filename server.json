@@ -1,0 +1,27 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "cn.suanlinfang/stt-tts-ocr-decision",
+  "title": "SuanLinFang AI Capabilities",
+  "description": "Speech-to-text, text-to-speech, OCR and typed decision-making APIs from suanlinfang.cn.",
+  "version": "0.1.6",
+  "icons": [
+    {
+      "src": "https://suanlinfang.cn/favicon.svg"
+    }
+  ],
+  "websiteUrl": "https://suanlinfang.cn",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://suanlinfang.cn/mcp",
+      "headers": [
+        {
+          "name": "X-SLF-Api-Key",
+          "description": "API key created at https://suanlinfang.cn/consume-web/api-keys.html (new accounts get a ¥10 trial credit)",
+          "isRequired": true,
+          "isSecret": true
+        }
+      ]
+    }
+  ]
+}

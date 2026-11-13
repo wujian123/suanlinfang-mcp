@@ -1,0 +1,32 @@
+[project]
+name = "suanlinfang-mcp"
+version = "0.1.6"
+description = "算邻坊开放能力的 MCP Server（语音识别/语音合成/文字识别/智能决策，stdio / Streamable HTTP 双入口）"
+readme = "README.md"
+authors = [{ name = "SuanLinFang" }]
+keywords = ["mcp", "suanlinfang", "stt", "tts", "ocr", "decision", "model-context-protocol", "fastmcp"]
+requires-python = ">=3.10"
+dependencies = [
+    "fastmcp-slim[server]>=4.1",
+    "suanlinfang-sdk>=0.1.0",
+]
+
+[project.urls]
+Homepage = "https://suanlinfang.cn"
+Documentation = "https://suanlinfang.cn/www/index.html"
+
+[project.scripts]
+# 仅 stdio 入口进可执行清单：托管平台（魔搭 FC 等）的 bridge 以 stdio 拉起子进程，
+# 若包内存在 <name>-http 命令会被优先选中导致形态错配。HTTP 形态用
+# `python -m suanlinfang_mcp.entry_http` 启动（ECS1 start.sh 即此姿势）。
+suanlinfang-mcp = "suanlinfang_mcp.entry_stdio:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["suanlinfang_mcp"]
+
+[tool.uv.sources]
+suanlinfang-sdk = { workspace = true }
