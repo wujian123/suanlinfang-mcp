@@ -1,6 +1,7 @@
-import json
+import asyncio
 from typing import Any, Literal
 
+import anyio
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from mcp.types import ToolAnnotations
@@ -10,7 +11,23 @@ from starlette.responses import JSONResponse
 from suanlinfang import SuanlinfangApiError, SuanlinfangClient
 from suanlinfang_mcp.auth import resolve_api_key
 
-mcp = FastMCP("suanlinfang")
+try:
+    from fastmcp.server.dependencies import get_context
+except ImportError:
+    get_context = None
+
+SERVER_INSTRUCTIONS = (
+    "算邻坊 AI 能力（suanlinfang.cn，按量计费，失败不计费）。"
+    "生图为引流主推能力：generate_image 一次调用出图（文生图/图生图合一，默认自动选模型）。"
+    "另有语音识别（STT）、语音合成（TTS）、文字识别（OCR）三族能力。"
+    "所有工具调用需 API Key（nk- 前缀，suanlinfang.cn/consume-web/api-keys.html 创建，新用户赠 ¥10 体验金）。"
+)
+
+WAIT_SECONDS_DEFAULT = 120
+WAIT_SECONDS_MIN = 10
+WAIT_SECONDS_MAX = 300
+
+mcp = FastMCP("suanlinfang", instructions=SERVER_INSTRUCTIONS)
 
 POLL_HINT = "建议每 10~30 秒查询一次（长音频按音频时长的 1/6~1/4 估算总耗时）"
 
@@ -28,15 +45,125 @@ async def healthz(request: Request) -> JSONResponse:
     return JSONResponse({"status": "ok", "server": "suanlinfang-mcp"})
 
 
+def _clamp_wait_seconds(value: int) -> int:
+    return max(WAIT_SECONDS_MIN, min(value, WAIT_SECONDS_MAX))
+
+
+def _current_context():
+    """请求上下文（无 fastmcp 依赖或无请求上下文时返回 None）。"""
+    if get_context is None:
+        return None
+    try:
+        return get_context()
+    except Exception:
+        return None
+
+
+def _make_progress_reporter(context, loop: asyncio.AbstractEventLoop):
+    """SDK 轮询跑在工作线程；progress notification 是协程，须回投主事件循环。"""
+
+    def on_progress(status: str, elapsed_seconds: float, wait_seconds: float) -> None:
+        try:
+            for coroutine in (
+                context.report_progress(int(elapsed_seconds), int(wait_seconds)),
+                context.info(f"生图任务 {status}（已等待 {int(elapsed_seconds)} 秒）"),
+            ):
+                future = asyncio.run_coroutine_threadsafe(coroutine, loop)
+                # 取走异常避免「exception was never retrieved」噪音
+                future.add_done_callback(lambda f: f.exception())
+        except Exception:
+            return
+
+    return on_progress
+
+
 @mcp.tool(annotations=_BILLED_ACTION)
-def transcribe_audio(audio_url: str, language: str | None = None, context: str | None = None) -> dict:
+async def generate_image(
+    prompt: str,
+    model: str | None = None,
+    init_image_url: str | None = None,
+    seed: int | None = None,
+    wait_seconds: int = WAIT_SECONDS_DEFAULT,
+) -> dict:
+    """AI 生图（1024×1024 PNG，按张计费，失败不计费）：传 prompt 即文生图；再传 init_image_url（参考图公网 URL，png/jpg/jpeg ≤10MB）即图生图（换装/换景/改背景等编辑指令写在 prompt 里）。
+    本工具一次调用内完成「提交→等待→出结果」，默认最多等 120 秒（wait_seconds 可调 10~300）；
+    出图成功返回 resultUrl（现签下载链接，1 小时内有效，请提醒用户及时下载转存）。
+    model 留空自动选：文生图=flux2-klein（快而省），图生图=qwen-image-edit-2511；要更高质量可传 z-image-turbo，在线模型与实时牌价先用 list_image_models 查询。
+    seed（非负整数）可复现同图：同 prompt + 同 seed 生成一致结果。
+    若等待超时仍未完成，返回 taskNo（任务不丢失、不计排队费），调用 get_image_task 继续查询。"""
+    wait = _clamp_wait_seconds(wait_seconds)
+    context = _current_context()
+    on_progress = _make_progress_reporter(context, asyncio.get_running_loop()) if context else None
+
+    def run() -> Any:
+        with _client() as client:
+            return client.image.generate_image(
+                prompt,
+                model=model,
+                init_image_url=init_image_url,
+                seed=seed,
+                wait_seconds=wait,
+                on_progress=on_progress,
+            )
+
+    result = await anyio.to_thread.run_sync(run)
+    if result.status in ("failed", "expired"):
+        raise ToolError(f"生图任务失败：{result.error_msg or '未知原因'}（失败不扣费，可调整 prompt/参考图后重试）")
+    payload: dict[str, Any] = {
+        "status": result.status,
+        "taskNo": result.task_no,
+        "model": result.model,
+    }
+    if result.result_url:
+        payload["resultUrl"] = result.result_url
+        payload["note"] = "下载链接 1 小时内有效，请提醒用户及时下载转存"
+    if result.input_url:
+        payload["inputUrl"] = result.input_url
+    if result.expire_at:
+        payload["expireAt"] = result.expire_at
+    if result.seed is not None:
+        payload["seed"] = result.seed
+    if not result.completed:
+        payload["hint"] = f"仍在生成（已等待 {wait} 秒，任务不丢失），请调用 get_image_task 继续查询"
+    return payload
+
+
+@mcp.tool(annotations=_READ_ONLY)
+def get_image_task(task_no: str) -> dict:
+    """查询生图任务状态。status：queued/running（进行中，快档常在数十秒内出图，慢档可能数分钟——视模型档位与当前空闲算力）、
+    success（resultUrl 为图片现签下载链接，1 小时内有效；链接过期后重新查询即换新链）、
+    failed（errorMsg 为失败原因，不扣费）、expired（结果已过保留期）。
+    建议每 5~10 秒查询一次。generate_image 等待超时降级后用本工具续查。"""
+    with _client() as client:
+        info = client.image.get_task(task_no)
+    payload: dict[str, Any] = {"status": info.status}
+    if info.result_url:
+        payload["resultUrl"] = info.result_url
+    if info.input_url:
+        payload["inputUrl"] = info.input_url
+    if info.expire_at:
+        payload["expireAt"] = info.expire_at
+    if info.error_msg:
+        payload["errorMsg"] = info.error_msg
+    return payload
+
+
+@mcp.tool(annotations=_READ_ONLY)
+def list_image_models() -> list[dict]:
+    """查询生图当前在线模型与实时牌价（id + pricing，按张计费）。选 model 前先看这个。"""
+    with _client() as client:
+        return client.image.list_models()
+
+
+@mcp.tool(annotations=_BILLED_ACTION)
+def transcribe_audio(audio_url: str, language: str | None = None, hotwords: str | None = None) -> dict:
     """把一段短音频（公网 URL）转成文字。适用于 ≤3 分钟、≤20MB 的录音/语音消息，同步秒级返回。
     更长的音频请改用 submit_transcription_task（异步任务）。
     language 留空自动检测（支持普通话、英语及 22 种中文方言）；指定时用语种代码（如 zh、en）。
-    context 可传热词（人名、术语、品牌，逗号分隔），专有名词按所列写法优先转写——会议转写建议填与会人名。
+    hotwords 可传热词（人名、术语、品牌，逗号分隔），专有名词按所列写法优先转写——会议转写建议填与会人名。
     返回全文纯文本（不含时间戳/分句时间轴）。计费按音频实际时长（约 0.5 元/小时，精确到秒），失败不计费。"""
     with _client() as client:
-        result = client.stt.transcribe_url(audio_url, language=language, context=context)
+        result = client.stt.transcribe_url(audio_url, language=language, hotwords=hotwords)
         return {
             "text": result.text,
             "durationMs": result.duration_ms,
@@ -48,16 +175,16 @@ def transcribe_audio(audio_url: str, language: str | None = None, context: str |
 def submit_transcription_task(
     audio_url: str,
     language: str | None = None,
-    context: str | None = None,
+    hotwords: str | None = None,
     file_name: str | None = None,
 ) -> dict:
     """提交长音频转写任务（会议录音/播客/网课，最长 2 小时、≤500MB，wav/mp3/flac/m4a/ogg/aac）。
     平台自动按 180 秒切段逐段转写并拼接全文（纯文本，不含时间戳）。提交后用 get_transcription_task 轮询结果。
-    language 留空自动检测，指定时用语种代码（如 zh、en）；context 可传热词（人名、术语、品牌，逗号分隔），对全部音频段生效。
+    language 留空自动检测，指定时用语种代码（如 zh、en）；hotwords 可传热词（人名、术语、品牌，逗号分隔），对全部音频段生效。
     计费按实际时长（约 0.5 元/小时），余额不足会在提交时被拒绝。"""
     with _client() as client:
         task_no = client.stt.transcribe_url_to_task(
-            audio_url, language=language, context=context, file_name=file_name
+            audio_url, language=language, hotwords=hotwords, file_name=file_name
         )
         return {"taskNo": task_no, "hint": POLL_HINT}
 
@@ -84,7 +211,7 @@ def get_transcription_task(task_no: str) -> dict:
 
 @mcp.tool(annotations=_BILLED_ACTION)
 def synthesize_speech(text: str, speaker: str = "default", audio_format: Literal["wav", "mp3"] = "wav") -> dict:
-    """把文本合成为语音（≤3000 UTF-8 字节，约 1000 汉字），同步返回现签下载链接（url，GET 即得音频，1 小时内有效）。
+    """把文本合成为语音（≤1000 字符），同步返回现签下载链接（url，GET 即得音频，1 小时内有效）。
     请提醒用户及时下载转存——链接过期后只能重新合成（重复计费）。
     更长的文本请改用 submit_speech_task（异步任务）。speaker 音色代码先用 list_tts_voices 查询。
     计费约 2 元/万字符，失败不计费。"""
@@ -135,21 +262,6 @@ def list_tts_voices() -> list[dict]:
 
 
 @mcp.tool(annotations=_BILLED_ACTION)
-def recognize_image(image_url: str, tier: Literal["standard", "accurate"], prompt: str | None = None) -> dict:
-    """识别图片中的文字（png/jpg/webp/bmp，≤20MB，公网 URL），同步返回逐行文本。
-    tier：standard 标准档（快速，适合清晰打印件/截图）；accurate 精准档（表格、多栏、倾斜拍摄等复杂版面）。
-    prompt 仅精准档生效：自定义识别指令（如「只提取表格金额列」），≤2000 字符，缺省识别全部文字。
-    计费按页（单图=1 页，约 0.5~1.5 分/页）。"""
-    with _client() as client:
-        result = client.ocr.recognize_url(image_url, tier=tier, prompt=prompt)
-        return {
-            "logId": result.log_id,
-            "words": result.words,
-            "wordsResultNum": result.words_result_num,
-        }
-
-
-@mcp.tool(annotations=_BILLED_ACTION)
 def submit_document_task(
     document_url: str,
     tier: Literal["standard", "accurate"],
@@ -179,46 +291,6 @@ def get_document_task(task_no: str) -> dict:
         if info.error_msg:
             payload["errorMsg"] = info.error_msg
         return payload
-
-
-@mcp.tool(annotations=_BILLED_ACTION)
-def decide(state: str, questions: dict | None = None, questions_json: str = "") -> dict:
-    """智能决策（System One 类型化判断）：输入业务状态与若干类型化问题，返回每题的校准概率，不生成文本。
-    适用：工单分类、风控判定、质检评估等结构化判断场景。无上下文记忆，每次请求独立。
-    questions 为 {题目id: 题目} 映射（1-32 题），type 三种：choice（多选一，criteria={选项名:描述}）、
-    noul（是否判断，criteria 可选 {true:描述,false:描述}）、score（有序等级打分，criteria=[等级描述...]），可选 instructions 说明该问什么。
-    示例：{"team":{"type":"choice","criteria":{"refund":"退款","logistics":"物流"}},"urgent":{"type":"noul"},"severity":{"type":"score","criteria":["轻微","一般","严重"]}}
-    answers 按同键回传，含选中项、置信度与全选项概率。
-    计费按输入 token（约 2 元/百万，输出免费），失败不计费。
-    不支持对象入参的客户端可改传 questions_json（questions 的 JSON 字符串，二选一）。
-
-    Args:
-        questions: 类型化问题映射（{题目id: 题目}，结构见上）。与 questions_json 二选一必填。
-        questions_json: questions 的 JSON 字符串形式，供只支持标量参数的客户端（如扣子试运行）使用。与 questions 二选一必填。
-    """
-    if questions is None and not questions_json:
-        raise ToolError(
-            "questions 与 questions_json 二选一必填：questions 为 {题目id: 题目} 映射，"
-            '示例 {"urgent": {"type": "noul"}}；'
-            "不支持对象入参的客户端可传其 JSON 字符串到 questions_json。"
-        )
-    if questions is not None and questions_json:
-        raise ToolError("questions 与 questions_json 二选一，请只传其一，不要同时传。")
-    if questions_json:
-        try:
-            parsed = json.loads(questions_json)
-        except json.JSONDecodeError as error:
-            raise ToolError(f"questions_json 不是合法 JSON：{error.msg}（第 {error.lineno} 行第 {error.colno} 列）") from error
-        if not isinstance(parsed, dict):
-            raise ToolError("questions_json 解析结果必须是 JSON 对象（{题目id: 题目} 映射），当前不是对象。")
-        questions = parsed
-    with _client() as client:
-        result = client.decision.decide(state, questions)
-        return {
-            "inferenceId": result.inference_id,
-            "answers": result.answers,
-            "usage": result.usage,
-        }
 
 
 __all__ = ["mcp", "SuanlinfangApiError", "ToolError"]

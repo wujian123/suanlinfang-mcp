@@ -2,14 +2,14 @@
 
 Official website: **[https://suanlinfang.cn](https://suanlinfang.cn)** — create an API key at [API Key Management](https://suanlinfang.cn/consume-web/api-keys.html) (new accounts get a free trial credit).
 
-Remote MCP server with **11 tools** in four capability families, Chinese-optimized, pay-as-you-go (failed calls are never billed):
+Remote MCP server with **12 tools** in four capability families, Chinese-optimized, pay-as-you-go (failed calls are never billed):
 
 | Family | Tools | Highlights |
 |---|---|---|
+| Image Generation | `generate_image`, `get_image_task`, `list_image_models` | text-to-image & image-to-image (edit) in a single call — submit, wait and get the result URL; 1024×1024 PNG, model auto-selected by default, billed per image |
 | Speech-to-Text (STT) | `transcribe_audio`, `submit_transcription_task`, `get_transcription_task` | ≤2h audio, hot-word correction, auto detection for Mandarin/English + 22 Chinese dialects |
-| Text-to-Speech (TTS) | `synthesize_speech`, `estimate_tts_cost`, `submit_speech_task`, `get_speech_task`, `list_tts_voices` | 21 voices, ≤200k chars per task, wav/mp3 |
-| OCR | `recognize_image`, `submit_document_task`, `get_document_task` | standard/accurate tiers, custom prompt (accurate tier), PDF ≤500 pages |
-| Decision | `decide` | typed judgments with calibrated confidence — choice / yes-no / score questions |
+| Text-to-Speech (TTS) | `synthesize_speech`, `submit_speech_task`, `get_speech_task`, `list_tts_voices` | 21 voices, ≤200k chars per task, wav/mp3 |
+| OCR (documents) | `submit_document_task`, `get_document_task` | full scanned PDFs up to 500 pages — whole-document jobs agents can't ingest into their own context; standard/accurate tiers, custom prompt (accurate tier) |
 
 ## Connect (remote, recommended)
 
@@ -66,7 +66,7 @@ The Python SDK lives in `packages/suanlinfang-sdk/` — a dependency-free REST c
 2. Console → [API Key Management](https://suanlinfang.cn/consume-web/api-keys.html) → create key (`nk-` prefix)
 3. Put the key in the `X-SLF-Api-Key` header (remote) or `SUANLINFANG_API_KEY` env (stdio)
 
-Reference pricing: transcription ≈ ¥0.5/hour of audio, TTS ≈ ¥2/10k chars, OCR ≈ ¥0.005–0.015/page, decision ≈ ¥2/M input tokens. Failed calls are never billed.
+Reference pricing: image generation billed per image (model-tiered, see `list_image_models` for live prices), transcription ≈ ¥0.5/hour of audio, TTS ≈ ¥2/10k chars, OCR ≈ ¥0.005–0.015/page. Failed calls are never billed.
 
 ## Docker
 
@@ -85,7 +85,7 @@ uv run python -m suanlinfang_mcp.entry_http   # local HTTP entry (127.0.0.1:8090
 Repo layout:
 
 - `packages/suanlinfang-sdk/` — REST client SDK (no MCP concepts; reusable by CLIs and other hosts)
-- `packages/suanlinfang-mcp/` — MCP protocol shell exposing the 11 tools
+- `packages/suanlinfang-mcp/` — MCP protocol shell exposing the 12 tools
 - `server.json` — official [MCP Registry](https://registry.modelcontextprotocol.io) metadata (`cn.suanlinfang/stt-tts-ocr-decision`)
 
 ## License

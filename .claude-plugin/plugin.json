@@ -1,7 +1,7 @@
 {
   "name": "suanlinfang",
-  "description": "SuanLinFang AI capabilities via MCP: speech-to-text (hot-word correction, 22 Chinese dialects), text-to-speech (21 voices), OCR (standard/accurate tiers, PDF up to 500 pages) and typed decision-making with calibrated confidence. Pay-as-you-go; API key from suanlinfang.cn.",
-  "version": "0.1.6",
+  "description": "SuanLinFang AI capabilities via MCP: AI image generation & editing (text-to-image and image-to-image in a single call), speech-to-text (hot-word correction, 22 Chinese dialects), text-to-speech (21 voices) and OCR (standard/accurate tiers, PDF up to 500 pages). Pay-as-you-go; API key from suanlinfang.cn.",
+  "version": "0.3.0",
   "author": {
     "name": "SuanLinFang",
     "url": "https://suanlinfang.cn"

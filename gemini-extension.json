@@ -1,7 +1,7 @@
 {
   "name": "suanlinfang",
-  "version": "0.1.6",
-  "description": "SuanLinFang AI capabilities via MCP: speech-to-text, text-to-speech, OCR and typed decision-making APIs (pay-as-you-go, Chinese-optimized).",
+  "version": "0.3.0",
+  "description": "SuanLinFang AI capabilities via MCP: AI image generation & editing, speech-to-text, text-to-speech and OCR APIs (pay-as-you-go, Chinese-optimized).",
   "httpUrl": "https://suanlinfang.cn/mcp",
   "headers": {
     "X-SLF-Api-Key": "${SLF_API_KEY}"

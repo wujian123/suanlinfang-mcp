@@ -13,16 +13,16 @@ def _client() -> SuanlinfangClient:
 
 @respx.mock
 def test_auth_header_sent():
-    route = respx.post(f"{BASE}/systemone").mock(return_value=httpx.Response(200, json={}))
+    route = respx.post(f"{BASE}/image/tasks").mock(return_value=httpx.Response(200, json={"taskId": "t1"}))
     with _client() as client:
-        client.decision.decide("s", {})
+        client.image.submit_task("flux2-klein", "一只橘猫")
     request = route.calls.last.request
     assert request.headers["Authorization"] == "Bearer nk-test-key"
 
 
 @respx.mock
 def test_error_envelope_mapping():
-    respx.post(f"{BASE}/systemone").mock(
+    respx.post(f"{BASE}/image/tasks").mock(
         return_value=httpx.Response(
             402,
             json={
@@ -33,7 +33,7 @@ def test_error_envelope_mapping():
     )
     with _client() as client:
         with pytest.raises(SuanlinfangApiError) as exc_info:
-            client.decision.decide("s", {})
+            client.image.submit_task("flux2-klein", "一只橘猫")
     error = exc_info.value
     assert error.status_code == 402
     assert error.code == "40201"
@@ -46,37 +46,37 @@ def test_error_envelope_mapping():
 @respx.mock
 def test_503_retry_with_retry_after(monkeypatch):
     monkeypatch.setattr("suanlinfang.http._sleep", lambda seconds: None)
-    route = respx.post(f"{BASE}/systemone").mock(
+    route = respx.post(f"{BASE}/image/tasks").mock(
         side_effect=[
             httpx.Response(503, headers={"Retry-After": "1"}, json={}),
-            httpx.Response(200, json={"inferenceId": "i1", "answers": {}, "usage": {}}),
+            httpx.Response(200, json={"taskId": "t1"}),
         ]
     )
     with _client() as client:
-        result = client.decision.decide("s", {})
-    assert result.inference_id == "i1"
+        task_no = client.image.submit_task("flux2-klein", "一只橘猫")
+    assert task_no == "t1"
     assert route.call_count == 2
 
 
 @respx.mock
 def test_503_retries_exhausted(monkeypatch):
     monkeypatch.setattr("suanlinfang.http._sleep", lambda seconds: None)
-    route = respx.post(f"{BASE}/systemone").mock(
+    route = respx.post(f"{BASE}/image/tasks").mock(
         return_value=httpx.Response(503, json={"error": {"message": "no nodes"}})
     )
     with _client() as client:
         with pytest.raises(SuanlinfangApiError) as exc_info:
-            client.decision.decide("s", {})
+            client.image.submit_task("flux2-klein", "一只橘猫")
     assert exc_info.value.retryable
     assert route.call_count == 4  # 1 次首发 + 3 次重试
 
 
 @respx.mock
 def test_timeout_maps_to_retryable_504():
-    respx.post(f"{BASE}/systemone").mock(side_effect=httpx.ReadTimeout("timed out"))
+    respx.post(f"{BASE}/image/tasks").mock(side_effect=httpx.ReadTimeout("timed out"))
     with _client() as client:
         with pytest.raises(SuanlinfangApiError) as exc_info:
-            client.decision.decide("s", {})
+            client.image.submit_task("flux2-klein", "一只橘猫")
     error = exc_info.value
     assert error.status_code == 504
     assert error.retryable

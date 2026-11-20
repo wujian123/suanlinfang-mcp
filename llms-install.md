@@ -1,7 +1,7 @@
 # SuanLinFang MCP — install guide for AI agents
 
-Install target: a remote MCP server (Streamable HTTP) exposing 11 pay-as-you-go AI tools
-(speech-to-text, text-to-speech, OCR, typed decision-making). Website: https://suanlinfang.cn
+Install target: a remote MCP server (Streamable HTTP) exposing 12 pay-as-you-go AI tools
+(AI image generation & editing, speech-to-text, text-to-speech, document OCR). Website: https://suanlinfang.cn
 
 The user needs an API key (prefix `nk-`). Get one at
 https://suanlinfang.cn/consume-web/api-keys.html (registration includes free trial credit).
@@ -51,12 +51,15 @@ or `uvx suanlinfang-mcp` with the env var set.
 - Errors: 401 = missing/invalid key (re-check config), 402 = balance empty (top up at
   suanlinfang.cn), 503 = capability node busy (retry shortly)
 
-## Tools (11)
+## Tools (12)
 
+Image: `generate_image` (text-to-image & image-to-image in one call — pass `prompt` alone or add
+`init_image_url` as the reference image for editing; model auto-selected by default, 1024×1024 PNG,
+billed per image), `get_image_task` (fallback poll if the wait times out), `list_image_models`
+(live models & prices) ·
 STT: `transcribe_audio` (≤3 min sync), `submit_transcription_task` / `get_transcription_task`
-(≤2h, hot words via `context`, 22 Chinese dialects) ·
-TTS: `synthesize_speech` (≤1000 chars sync), `estimate_tts_cost`, `submit_speech_task` /
+(≤2h, hot words via `hotwords`, 22 Chinese dialects) ·
+TTS: `synthesize_speech` (≤1000 chars sync), `submit_speech_task` /
 `get_speech_task` (≤200k chars), `list_tts_voices` ·
-OCR: `recognize_image` (standard/accurate tiers, optional prompt), `submit_document_task` /
-`get_document_task` (PDF ≤500 pages) ·
-Decision: `decide` (choice/yes-no/score questions with calibrated probabilities).
+Document OCR: `submit_document_task` / `get_document_task` (full scanned PDFs ≤500 pages —
+whole-document jobs too large to feed through the agent's own vision).

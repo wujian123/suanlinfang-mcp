@@ -53,8 +53,32 @@ class OcrResult:
 
 
 @dataclass
-class DecisionResult:
-    inference_id: str
-    answers: dict[str, Any]
-    usage: dict[str, Any]
-    latency_ms: int | None = None
+class ImageTaskInfo:
+    """生图任务查询结果（单张图单单元任务，doneUnits/totalUnits 恒 1/1）。"""
+
+    task_no: str
+    status: str
+    total_units: int | None = None
+    done_units: int | None = None
+    result_url: str | None = None
+    # 图生图任务的参考图现签回看链接（纯文生图无此字段）
+    input_url: str | None = None
+    seed: int | None = None
+    expire_at: str | None = None
+    error_msg: str | None = None
+    raw: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class ImageGenerateResult:
+    """generate_image 高层封装结果。completed=False 表示等待超时未终态（降级，非错误）。"""
+
+    completed: bool
+    task_no: str
+    status: str
+    model: str
+    result_url: str | None = None
+    input_url: str | None = None
+    expire_at: str | None = None
+    seed: int | None = None
+    error_msg: str | None = None

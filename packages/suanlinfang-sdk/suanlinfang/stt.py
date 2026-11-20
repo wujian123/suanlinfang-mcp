@@ -13,13 +13,13 @@ class SttClient:
     def __init__(self, transport: HttpTransport):
         self.transport = transport
 
-    def transcribe_url(self, url: str, language: str | None = None, context: str | None = None) -> SttSingleResult:
+    def transcribe_url(self, url: str, language: str | None = None, hotwords: str | None = None) -> SttSingleResult:
         """单笔转写（公网 URL，音频 ≤3 分钟 / ≤20MB），同步返回。"""
         form = {"url": url}
         if language:
             form["language"] = language
-        if context:
-            form["context"] = context
+        if hotwords:
+            form["hotwords"] = hotwords
         body = self.transport.request_json("POST", "/stt/url", data=form)
         result = body.get("result") or {}
         audio_info = body.get("audioInfo") or {}
@@ -50,14 +50,14 @@ class SttClient:
         self,
         file_key: str,
         language: str | None = None,
-        context: str | None = None,
+        hotwords: str | None = None,
         file_name: str | None = None,
     ) -> str:
         payload: dict = {"audio": {"url": file_key}}
         if language:
             payload["language"] = language
-        if context:
-            payload["context"] = context
+        if hotwords:
+            payload["hotwords"] = hotwords
         if file_name:
             payload["fileName"] = file_name
         body = self.transport.request_json("POST", "/stt/tasks", json=payload)
@@ -84,7 +84,7 @@ class SttClient:
         self,
         url: str,
         language: str | None = None,
-        context: str | None = None,
+        hotwords: str | None = None,
         file_name: str | None = None,
     ) -> str:
         """长音频 URL → 任务：流式下载（≤500MB）→ 签名 → OSS 直传 → 提交任务，返回 taskNo。"""
@@ -102,4 +102,4 @@ class SttClient:
                 ticket = self.request_ticket(derived_name, size_bytes)
                 # 流式上传（文件对象直传，500MB 级不整读进内存）
                 self.upload_file(ticket, audio_file)
-        return self.submit_task(ticket.file_key, language=language, context=context, file_name=derived_name)
+        return self.submit_task(ticket.file_key, language=language, hotwords=hotwords, file_name=derived_name)

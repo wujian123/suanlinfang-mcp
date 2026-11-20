@@ -9,7 +9,7 @@ class TtsClient:
         self.transport = transport
 
     def synthesize(self, text: str, speaker: str, audio_format: str | None = None) -> TtsSingleResult:
-        """单笔合成（≤3000 UTF-8 字节，约 1000 汉字），同步返回现签下载链接（1 小时有效）。"""
+        """单笔合成（≤1000 字符），同步返回现签下载链接（1 小时有效）。"""
         audio_params: dict[str, Any] = {}
         if audio_format:
             audio_params["format"] = audio_format

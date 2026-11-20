@@ -23,7 +23,7 @@ def test_transcribe_url_single():
         )
     )
     with _client() as client:
-        result = client.stt.transcribe_url("https://cdn.test/a.wav", language="zh", context="王建国")
+        result = client.stt.transcribe_url("https://cdn.test/a.wav", language="zh", hotwords="王建国")
     assert result.text == "欢迎来到算邻坊。"
     assert result.duration_ms == 7400
     # 回归：表单请求的 Content-Type 必须是 urlencoded（曾因写死 application/json 假绿）
@@ -31,7 +31,7 @@ def test_transcribe_url_single():
     body = route.calls.last.request.content.decode()
     assert "url=https%3A%2F%2Fcdn.test%2Fa.wav" in body
     assert "language=zh" in body
-    assert "%E7%8E%8B%E5%BB%BA%E5%9B%BD" in body  # context 热词已 urlencode
+    assert "%E7%8E%8B%E5%BB%BA%E5%9B%BD" in body  # hotwords 热词已 urlencode
 
 
 @respx.mock
@@ -54,7 +54,7 @@ def test_transcribe_url_to_task_full_flow():
         return_value=httpx.Response(200, json={"taskId": "task-1"})
     )
     with _client() as client:
-        task_no = client.stt.transcribe_url_to_task(audio_url, language="zh", context="江斌")
+        task_no = client.stt.transcribe_url_to_task(audio_url, language="zh", hotwords="江斌")
     assert task_no == "task-1"
     put_request = put_route.calls.last.request
     assert put_request.headers["Content-Type"] == "audio/wav"
