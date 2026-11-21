@@ -3,7 +3,7 @@
   "name": "cn.suanlinfang/stt-tts-ocr-decision",
   "title": "SuanLinFang AI Capabilities",
   "description": "AI image generation & editing, speech-to-text, text-to-speech and OCR APIs from suanlinfang.cn.",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "icons": [
     {
       "src": "https://suanlinfang.cn/favicon.svg"
