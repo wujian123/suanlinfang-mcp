@@ -1,6 +1,6 @@
 [project]
 name = "suanlinfang-sdk"
-version = "0.2.0"
+version = "0.3.1"
 description = "算邻坊开放 API Python 客户端（文生图 / 语音识别 / 语音合成 / 文字识别）"
 readme = "README.md"
 authors = [{ name = "SuanLinFang" }]

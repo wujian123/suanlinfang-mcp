@@ -10,13 +10,18 @@ BASE_URL_ENV = "SUANLINFANG_BASE_URL"
 
 
 class SdkConfig:
-    """客户端配置；base_url 不传时走 env 覆盖（dev 联调用），再退默认生产地址。"""
+    """客户端配置；base_url 不传时走 env 覆盖（dev 联调用），再退默认生产地址。
+
+    client_tag 可选：渠道自报标识，随鉴权请求以 X-SLF-Client 头发出（服务端 channel 归因），
+    由 MCP 壳从握手 clientInfo 推导（如 mcp-cursor）；裸 SDK 调用方不传即不报。
+    """
 
     def __init__(
         self,
         api_key: str,
         base_url: str | None = None,
         timeout: float = 120.0,
+        client_tag: str | None = None,
     ):
         if not api_key or not api_key.strip():
             raise SuanlinfangAuthError(
@@ -27,3 +32,4 @@ class SdkConfig:
         resolved = base_url or os.environ.get(BASE_URL_ENV) or DEFAULT_BASE_URL
         self.base_url = resolved.rstrip("/")
         self.timeout = timeout
+        self.client_tag = (client_tag or "").strip() or None

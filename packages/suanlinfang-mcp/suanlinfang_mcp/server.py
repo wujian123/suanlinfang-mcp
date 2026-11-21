@@ -1,10 +1,11 @@
 import asyncio
+import re
 from typing import Any, Literal
 
 import anyio
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
-from mcp.types import ToolAnnotations
+from mcp.types import CLIENT_INFO_META_KEY, ToolAnnotations
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
@@ -37,7 +38,35 @@ _BILLED_ACTION = ToolAnnotations(read_only_hint=False, destructive_hint=False, i
 
 
 def _client() -> SuanlinfangClient:
-    return SuanlinfangClient(api_key=resolve_api_key())
+    return SuanlinfangClient(api_key=resolve_api_key(), client_tag=_client_tag())
+
+
+def _client_tag() -> str:
+    """渠道归因：能取到客户端名 → mcp-<客户端名>（如 mcp-cursor）；取不到也兜底裸值 mcp
+    ——经本 server 发出的请求必然是 MCP 流量，身份已知，细目（哪个客户端）才是可选增强。
+    客户端名两个协议纪元二选一：2026-07-28+ 随每请求 _meta 携带，此前在 initialize 握手顶层。"""
+    name = _client_name()
+    normalized = re.sub(r"[^a-z0-9]+", "-", (name or "").strip().lower()).strip("-")
+    if normalized:
+        return ("mcp-" + normalized)[:32]
+    return "mcp"
+
+
+def _client_name() -> str | None:
+    context = _current_context()
+    if context is None:
+        return None
+    try:
+        request_context = context.request_context
+        # 新纪元：clientInfo 随每请求 _meta（dict 形态）
+        meta_info = request_context.meta.get(CLIENT_INFO_META_KEY)
+        if isinstance(meta_info, dict) and meta_info.get("name"):
+            return str(meta_info["name"])
+        # 经典纪元：initialize 握手顶层（对象形态）
+        client_info = request_context.session.client_params.clientInfo
+        return (client_info.name if client_info else None)
+    except Exception:
+        return None
 
 
 @mcp.custom_route("/healthz", methods=["GET"])

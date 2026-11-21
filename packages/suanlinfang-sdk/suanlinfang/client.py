@@ -19,8 +19,9 @@ class SuanlinfangClient:
     也可用 with 语句（复用底层 httpx 连接池）。
     """
 
-    def __init__(self, api_key: str, base_url: str | None = None, timeout: float = 60.0):
-        self.config = SdkConfig(api_key=api_key, base_url=base_url, timeout=timeout)
+    def __init__(self, api_key: str, base_url: str | None = None, timeout: float = 60.0,
+                 client_tag: str | None = None):
+        self.config = SdkConfig(api_key=api_key, base_url=base_url, timeout=timeout, client_tag=client_tag)
         self._transport = HttpTransport(self.config)
         self.image = ImageClient(self._transport)
         self.stt = SttClient(self._transport)

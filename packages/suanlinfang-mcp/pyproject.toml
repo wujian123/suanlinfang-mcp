@@ -1,6 +1,6 @@
 [project]
 name = "suanlinfang-mcp"
-version = "0.3.0"
+version = "0.3.1"
 description = "算邻坊开放能力的 MCP Server（文生图/图生图、语音识别、语音合成、文字识别，stdio / Streamable HTTP 双入口）"
 readme = "README.md"
 authors = [{ name = "SuanLinFang" }]
@@ -8,7 +8,7 @@ keywords = ["mcp", "suanlinfang", "image-generation", "stt", "tts", "ocr", "mode
 requires-python = ">=3.10"
 dependencies = [
     "fastmcp-slim[server]>=4.1",
-    "suanlinfang-sdk>=0.2.0",
+    "suanlinfang-sdk>=0.3.1",
 ]
 
 [project.urls]

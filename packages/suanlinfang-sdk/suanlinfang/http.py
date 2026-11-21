@@ -36,7 +36,10 @@ class HttpTransport:
 
     def _headers(self) -> dict[str, str]:
         # Content-Type 不在此设置：json=/data= 由 httpx 按请求体类型自动带（表单写死 json 会被服务端 400）
-        return {"Authorization": f"Bearer {self.config.api_key}"}
+        headers = {"Authorization": f"Bearer {self.config.api_key}"}
+        if self.config.client_tag:
+            headers["X-SLF-Client"] = self.config.client_tag
+        return headers
 
     def _request(
         self,
